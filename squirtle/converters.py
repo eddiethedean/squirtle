@@ -1,6 +1,6 @@
 """Core conversion functions for squirtle."""
 
-from typing import TYPE_CHECKING, Any, Dict, Optional, Type, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union, cast
 
 if TYPE_CHECKING:
     import polars as pl
@@ -28,6 +28,7 @@ from squirtle.type_mappings import polars_to_sqlalchemy_type, sqlalchemy_to_pola
 
 def to_sqlalchemy_model(
     polars_schema: Union[Dict[str, DataType], "pl.Schema"],
+    primary_key: Union[str, List[str]],
     class_name: str = "GeneratedModel",
     base: Optional[Type[DeclarativeBase]] = None,
 ) -> Type[DeclarativeBase]:
@@ -36,6 +37,7 @@ def to_sqlalchemy_model(
 
     Args:
         polars_schema: Polars schema (dict[str, DataType] or pl.Schema object)
+        primary_key: Field name(s) to use as primary key. Can be a single string or list of strings for composite keys.
         class_name: Name for the generated model class (must be a valid Python identifier)
         base: Base class for the model (optional, defaults to DeclarativeBase)
 
@@ -43,7 +45,7 @@ def to_sqlalchemy_model(
         SQLAlchemy model class with __tablename__ attribute
 
     Raises:
-        SchemaError: If the schema structure is invalid or class_name is invalid
+        SchemaError: If the schema structure is invalid, class_name is invalid, or primary_key fields don't exist
         UnsupportedTypeError: If a type cannot be converted
         ImportError: If required dependencies are not installed
     """
@@ -79,6 +81,25 @@ def to_sqlalchemy_model(
         if not field_name or not isinstance(field_name, str):
             raise SchemaError(f"Invalid field name: {field_name}")
 
+    # Normalize primary_key to a list
+    if isinstance(primary_key, str):
+        primary_key_fields = [primary_key]
+    elif isinstance(primary_key, list):
+        primary_key_fields = primary_key
+    else:
+        raise SchemaError(
+            f"primary_key must be a string or list of strings, got {type(primary_key).__name__}"
+        )
+
+    # Validate that all primary key fields exist in the schema
+    for pk_field in primary_key_fields:
+        if not isinstance(pk_field, str):
+            raise SchemaError(f"Primary key field must be a string, got {type(pk_field).__name__}")
+        if pk_field not in schema_dict:
+            raise SchemaError(
+                f"Primary key field '{pk_field}' not found in schema. Available fields: {list(schema_dict.keys())}"
+            )
+
     # Use provided base or create default
     if base is None:
         from sqlalchemy.orm import DeclarativeBase as DefaultBase
@@ -90,9 +111,6 @@ def to_sqlalchemy_model(
 
     # Build class attributes
     attrs = {"__tablename__": _to_snake_case(class_name)}
-
-    # Use first field as primary key (Polars doesn't track nullability in schemas)
-    primary_key_field = field_names[0]
 
     # Create columns
     for field_name, field_type in schema_dict.items():
@@ -107,7 +125,7 @@ def to_sqlalchemy_model(
             raise UnsupportedTypeError(f"Field '{field_name}': {e}") from e
 
         # Determine if this is a primary key
-        is_primary_key = field_name == primary_key_field
+        is_primary_key = field_name in primary_key_fields
 
         # Create column
         if Column is None:
@@ -182,6 +200,7 @@ def to_polars_schema(model: Union[Type, object]) -> "pl.Schema":
 
 def to_sqlmodel_class(
     polars_schema: Union[Dict[str, DataType], "pl.Schema"],
+    primary_key: str,
     class_name: str = "GeneratedModel",
 ) -> Any:  # Return type is Type[SQLModel] but SQLModel may not be available at type-check time
     """
@@ -189,13 +208,14 @@ def to_sqlmodel_class(
 
     Args:
         polars_schema: Polars schema (dict[str, DataType] or pl.Schema object)
+        primary_key: Field name to use as primary key (must be a single string)
         class_name: Name for the generated model class (must be a valid Python identifier)
 
     Returns:
         SQLModel class with type annotations and default values
 
     Raises:
-        SchemaError: If the schema structure is invalid or class_name is invalid
+        SchemaError: If the schema structure is invalid, class_name is invalid, or primary_key field doesn't exist
         UnsupportedTypeError: If a type cannot be converted
         ImportError: If SQLModel is not installed
     """
@@ -236,14 +256,21 @@ def to_sqlmodel_class(
         if not field_name or not isinstance(field_name, str):
             raise SchemaError(f"Invalid field name: {field_name}")
 
+    # Validate primary_key parameter
+    if not isinstance(primary_key, str):
+        raise SchemaError(
+            f"primary_key must be a string for SQLModel, got {type(primary_key).__name__}"
+        )
+    if primary_key not in schema_dict:
+        raise SchemaError(
+            f"Primary key field '{primary_key}' not found in schema. Available fields: {list(schema_dict.keys())}"
+        )
+
     # Import typing for type annotations
     from typing import Optional
 
     # Build class attributes
     attrs = {"__tablename__": _to_snake_case(class_name)}
-
-    # Use first field as primary key
-    primary_key_field = field_names[0]
 
     # Import types for annotations
     from datetime import date, datetime, time
@@ -255,7 +282,7 @@ def to_sqlmodel_class(
         # Check if type is nullable and unwrap if needed
         is_nullable = _is_polars_type_nullable(field_type)
         base_type = _unwrap_polars_nullable(field_type)
-        is_primary_key = field_name == primary_key_field
+        is_primary_key = field_name == primary_key
 
         # Get Python type annotation
         type_str = str(base_type)

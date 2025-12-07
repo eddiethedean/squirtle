@@ -36,7 +36,7 @@ class TestToSQLAlchemyModel:
             }
         )
 
-        Person = to_sqlalchemy_model(schema, class_name="Person", base=Base)
+        Person = to_sqlalchemy_model(schema, primary_key="name", class_name="Person", base=Base)
 
         assert Person.__name__ == "Person"
         assert Person.__tablename__ == "person"
@@ -57,7 +57,9 @@ class TestToSQLAlchemyModel:
             "name": pl.String,
         }
 
-        Model = to_sqlalchemy_model(schema_dict, class_name="TestModel", base=Base)
+        Model = to_sqlalchemy_model(
+            schema_dict, primary_key="id", class_name="TestModel", base=Base
+        )
 
         assert Model.__name__ == "TestModel"
         assert hasattr(Model, "id")
@@ -72,9 +74,11 @@ class TestToSQLAlchemyModel:
             }
         )
 
-        Model = to_sqlalchemy_model(schema, class_name="TestModelNullable", base=Base)
+        Model = to_sqlalchemy_model(
+            schema, primary_key="id", class_name="TestModelNullable", base=Base
+        )
 
-        # id should be primary key (first field)
+        # id should be primary key
         assert Model.id.primary_key is True
         # All fields default to nullable in Polars schemas
         assert Model.name.nullable is True
@@ -84,7 +88,7 @@ class TestToSQLAlchemyModel:
         schema = pl.Schema({})
 
         with pytest.raises(SchemaError, match="at least one field"):
-            to_sqlalchemy_model(schema, base=Base)
+            to_sqlalchemy_model(schema, primary_key="name", base=Base)
 
     def test_duplicate_fields(self):
         """Test that duplicate fields raise SchemaError."""
@@ -106,7 +110,7 @@ class TestToSQLAlchemyModel:
         }
 
         with pytest.raises(SchemaError, match="Invalid field name"):
-            to_sqlalchemy_model(schema_dict, base=Base)
+            to_sqlalchemy_model(schema_dict, primary_key="", base=Base)
 
     def test_unsupported_type(self):
         """Test that unsupported types raise UnsupportedTypeError."""
@@ -117,7 +121,7 @@ class TestToSQLAlchemyModel:
         )
 
         with pytest.raises(UnsupportedTypeError):
-            to_sqlalchemy_model(schema, base=Base)
+            to_sqlalchemy_model(schema, primary_key="items", base=Base)
 
 
 class TestToPolarsSchema:

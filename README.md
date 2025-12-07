@@ -27,7 +27,7 @@ Squirtle provides simple, bidirectional conversion functions to transform schema
 - 🛡️ **Type Safety**: Clear error messages for unsupported types and invalid schemas
 - 🎯 **Simple API**: Functional, stateless functions with minimal dependencies
 - ✅ **Schema Validation**: Automatic validation of schemas before conversion
-- 🔑 **Primary Key Detection**: Smart primary key detection and auto-generation
+- 🔑 **Explicit Primary Keys**: Specify primary key fields explicitly for clarity and control
 - ⚡ **Zero Runtime Overhead**: Lightweight with no performance impact
 
 ## 📦 Installation
@@ -83,7 +83,7 @@ polars_schema = pl.Schema({
 })
 
 # Convert to SQLAlchemy model
-Person = to_sqlalchemy_model(polars_schema, class_name="Person", base=Base)
+Person = to_sqlalchemy_model(polars_schema, primary_key="name", class_name="Person", base=Base)
 print(Person.__tablename__)  # Output: 'person'
 print(Person.name)  # Output: Person.name
 ```
@@ -126,7 +126,7 @@ polars_schema = pl.Schema({
 })
 
 # Convert to SQLModel class
-Person = to_sqlmodel_class(polars_schema, class_name="Person")
+Person = to_sqlmodel_class(polars_schema, primary_key="id", class_name="Person")
 print(Person.__tablename__)  # Output: 'person'
 
 # Use the class
@@ -197,7 +197,7 @@ df = pl.DataFrame({
 schema = df.schema
 
 # Convert to SQLAlchemy model for database operations
-User = to_sqlalchemy_model(schema, class_name="User", base=Base)
+User = to_sqlalchemy_model(schema, primary_key="user_id", class_name="User", base=Base)
 print(User.__tablename__)  # Output: 'user'
 print(list(User.__table__.columns.keys()))  # Output: ['user_id', 'name', 'score']
 
@@ -229,7 +229,7 @@ schema = to_polars_schema(Product)
 print(schema)  # Output: Schema([('id', Int32), ('name', String), ('price', Float64)])
 
 # Use with Polars for data processing
-df = pl.DataFrame(data, schema=schema)
+# df = pl.DataFrame(your_data, schema=schema)
 ```
 
 ### Schema Migration
@@ -257,7 +257,7 @@ polars_schema = to_polars_schema(MyModel)
 df = pl.DataFrame({"id": [1, 2], "name": ["Alice", "Bob"]}, schema=polars_schema)
 
 # Convert back to SQLAlchemy for database storage
-NewModel = to_sqlalchemy_model(df.schema, class_name="NewModel", base=Base)
+NewModel = to_sqlalchemy_model(df.schema, primary_key="id", class_name="NewModel", base=Base)
 print(NewModel.__tablename__)  # Output: 'new_model'
 ```
 
@@ -278,7 +278,7 @@ schema = pl.Schema({
     "name": pl.String,
 })
 
-Model = to_sqlalchemy_model(schema, class_name="MyModel", base=CustomBase)
+Model = to_sqlalchemy_model(schema, primary_key="id", class_name="MyModel", base=CustomBase)
 ```
 
 ### Round-Trip Conversion
@@ -298,7 +298,7 @@ original = pl.Schema({
 })
 
 # Convert to SQLAlchemy and back
-model = to_sqlalchemy_model(original, base=Base)
+model = to_sqlalchemy_model(original, primary_key="name", base=Base)
 converted_back = to_polars_schema(model)
 
 # Verify types match
@@ -325,14 +325,14 @@ class Base(DeclarativeBase):
 # Note: Polars schemas don't explicitly track nullability in the DataType itself
 # Squirtle detects nullable types by checking for Null wrappers or inner attributes
 schema = pl.Schema({
-    "id": pl.Int64,  # Non-nullable (will be primary key)
+    "id": pl.Int64,  # Will be used as primary key (must be specified explicitly)
     "name": pl.String,  # Type nullability is detected automatically
     "email": pl.String,
 })
 
-Model = to_sqlalchemy_model(schema, class_name="User", base=Base)
+Model = to_sqlalchemy_model(schema, primary_key="id", class_name="User", base=Base)
 
-# id is primary key (first field)
+# id is primary key
 print(Model.id.primary_key)  # Output: True
 print(Model.id.nullable)     # Output: True
 print(Model.name.nullable)   # Output: True
@@ -359,10 +359,43 @@ schema_dict = {
     "created_at": pl.Datetime,
 }
 
-Model = to_sqlalchemy_model(schema_dict, class_name="User", base=Base)
+Model = to_sqlalchemy_model(schema_dict, primary_key="id", class_name="User", base=Base)
 print(Model.__tablename__)  # Output: 'user'
 print(list(Model.__table__.columns.keys()))  # Output: ['id', 'name', 'created_at']
 ```
+
+### Composite Primary Keys
+
+SQLAlchemy supports composite primary keys (multiple fields). You can specify multiple fields as a list:
+
+```python
+from squirtle import to_sqlalchemy_model
+import polars as pl
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    pass
+
+schema = pl.Schema({
+    "user_id": pl.Int64,
+    "session_id": pl.Int64,
+    "data": pl.String,
+})
+
+# Use a list for composite primary key
+Session = to_sqlalchemy_model(
+    schema, 
+    primary_key=["user_id", "session_id"], 
+    class_name="UserSession", 
+    base=Base
+)
+
+# Both fields are primary keys
+print(Session.user_id.primary_key)    # Output: True
+print(Session.session_id.primary_key)  # Output: True
+```
+
+**Note**: SQLModel only supports single primary keys, so `to_sqlmodel_class()` requires a string, not a list.
 
 ## ⚠️ Limitations
 
@@ -381,7 +414,7 @@ Squirtle provides clear error messages through custom exceptions:
 from squirtle import ConversionError, UnsupportedTypeError, SchemaError
 
 try:
-    schema = to_sqlalchemy_model(invalid_schema)
+    schema = to_sqlalchemy_model(invalid_schema, primary_key="id")
 except SchemaError as e:
     print(f"Invalid schema: {e}")
 except UnsupportedTypeError as e:
@@ -400,7 +433,7 @@ except ConversionError as e:
 
 ## 📖 API Reference
 
-### `to_sqlalchemy_model(polars_schema, class_name="GeneratedModel", base=None)`
+### `to_sqlalchemy_model(polars_schema, primary_key, class_name="GeneratedModel", base=None)`
 
 Convert a Polars schema to a SQLAlchemy model class.
 
@@ -409,6 +442,7 @@ Convert a Polars schema to a SQLAlchemy model class.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `polars_schema` | `dict[str, DataType]` or `pl.Schema` | _required_ | Polars schema to convert |
+| `primary_key` | `str` or `list[str]` | _required_ | Field name(s) to use as primary key. Can be a single string or list for composite keys. |
 | `class_name` | `str` | `"GeneratedModel"` | Name for the generated model class |
 | `base` | `Type[DeclarativeBase]` | `DeclarativeBase` | Base class for the model (optional) |
 
@@ -437,7 +471,7 @@ schema = pl.Schema({
     "age": pl.Int32,
 })
 
-Person = to_sqlalchemy_model(schema, class_name="Person", base=Base)
+Person = to_sqlalchemy_model(schema, primary_key="name", class_name="Person", base=Base)
 # Person is now a SQLAlchemy model class
 ```
 
@@ -484,7 +518,7 @@ schema = to_polars_schema(Person)
 
 ---
 
-### `to_sqlmodel_class(polars_schema, class_name="GeneratedModel")`
+### `to_sqlmodel_class(polars_schema, primary_key, class_name="GeneratedModel")`
 
 Convert a Polars schema to a SQLModel class with type annotations.
 
@@ -493,6 +527,7 @@ Convert a Polars schema to a SQLModel class with type annotations.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `polars_schema` | `dict[str, DataType]` or `pl.Schema` | _required_ | Polars schema to convert |
+| `primary_key` | `str` | _required_ | Field name to use as primary key (must be a single string) |
 | `class_name` | `str` | `"GeneratedModel"` | Name for the generated model class |
 
 **Returns:**
@@ -512,13 +547,14 @@ import polars as pl
 from squirtle import to_sqlmodel_class
 
 schema = pl.Schema({
+    "id": pl.Int64,
     "name": pl.String,
     "age": pl.Int32,
 })
 
-Person = to_sqlmodel_class(schema, class_name="Person")
+Person = to_sqlmodel_class(schema, primary_key="id", class_name="Person")
 # Person is now a SQLModel class with type annotations
-person = Person(name="Alice", age=30)
+person = Person(id=1, name="Alice", age=30)
 ```
 
 ## 🛠️ Development

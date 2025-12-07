@@ -39,13 +39,13 @@ class TestImportErrors:
         """Test ImportError when polars is not installed."""
         with patch("squirtle.converters.pl", None):
             with pytest.raises(ImportError, match="polars is required"):
-                to_sqlalchemy_model({"id": pl.Int64}, base=CoverageBase)
+                to_sqlalchemy_model({"id": pl.Int64}, primary_key="id", base=CoverageBase)
 
     def test_to_sqlalchemy_model_sqlalchemy_not_installed(self):
         """Test ImportError when sqlalchemy is not installed."""
         with patch("squirtle.converters.DeclarativeBase", None):
             with pytest.raises(ImportError, match="sqlalchemy is required"):
-                to_sqlalchemy_model({"id": pl.Int64}, base=CoverageBase)
+                to_sqlalchemy_model({"id": pl.Int64}, primary_key="id", base=CoverageBase)
 
     def test_to_polars_schema_polars_not_installed(self):
         """Test ImportError when polars is not installed."""
@@ -140,7 +140,7 @@ class TestImportErrors:
 
         with patch("builtins.__import__", side_effect=mock_import):
             with pytest.raises(ImportError, match="sqlmodel is required"):
-                to_sqlmodel_class(schema)
+                to_sqlmodel_class(schema, primary_key="id")
 
     def test_is_polars_type_nullable_polars_not_installed(self):
         """Test _is_polars_type_nullable when polars is not installed."""
@@ -161,7 +161,9 @@ class TestEdgeCases:
     def test_to_sqlalchemy_model_dict_type(self):
         """Test that dict type is handled correctly."""
         schema_dict = {"id": pl.Int64}
-        Model = to_sqlalchemy_model(schema_dict, class_name="DictModel", base=CoverageBase)
+        Model = to_sqlalchemy_model(
+            schema_dict, primary_key="id", class_name="DictModel", base=CoverageBase
+        )
         assert hasattr(Model, "id")
 
     # Note: Duplicate field detection (lines 65, 221) is difficult to test because
@@ -173,14 +175,16 @@ class TestEdgeCases:
     def test_to_sqlalchemy_model_default_base(self):
         """Test that default base is created when None provided."""
         schema = pl.Schema({"id": pl.Int64})
-        Model = to_sqlalchemy_model(schema, class_name="DefaultBaseModel", base=None)
+        Model = to_sqlalchemy_model(
+            schema, primary_key="id", class_name="DefaultBaseModel", base=None
+        )
         assert hasattr(Model, "id")
         assert Model.__tablename__ == "default_base_model"
 
     def test_to_sqlmodel_class_dict_type(self):
         """Test that dict type is handled in to_sqlmodel_class."""
         schema_dict = {"id": pl.Int64}
-        Model = to_sqlmodel_class(schema_dict, class_name="DictSQLModel")
+        Model = to_sqlmodel_class(schema_dict, primary_key="id", class_name="DictSQLModel")
         assert Model.__name__ == "DictSQLModel"
 
     # Note: Duplicate field detection is difficult to test (see comment above)
@@ -197,7 +201,7 @@ class TestEdgeCases:
         # This is tricky since we can't easily create an unknown Polars type
         # But we can test the logic by checking the code path
         schema = pl.Schema({"id": pl.Int64})  # Known type
-        Model = to_sqlmodel_class(schema, class_name="KnownTypeModel")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="KnownTypeModel")
         assert Model is not None
 
     def test_sqlmodel_non_nullable_field(self):
@@ -205,7 +209,7 @@ class TestEdgeCases:
         # This tests the `if not is_nullable:` branch
         # Since Polars schemas default to nullable, we need to test the logic differently
         schema = pl.Schema({"id": pl.Int64})
-        Model = to_sqlmodel_class(schema, class_name="NonNullableModel")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="NonNullableModel")
         # The field should be created (is_nullable defaults to True in our implementation)
         assert "id" in Model.__annotations__
 
@@ -215,7 +219,7 @@ class TestEdgeCases:
         # This would require an unknown Polars type, which is hard to create
         # But we can verify the code path exists
         schema = pl.Schema({"id": pl.Int64})
-        Model = to_sqlmodel_class(schema, class_name="AnyTypeModel")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="AnyTypeModel")
         assert Model is not None
 
 
@@ -371,7 +375,9 @@ class TestAdditionalCoverage:
     def test_to_sqlalchemy_model_isinstance_dict(self):
         """Test isinstance check for dict type."""
         schema_dict = {"id": pl.Int64}
-        Model = to_sqlalchemy_model(schema_dict, class_name="IsInstanceDict", base=CoverageBase)
+        Model = to_sqlalchemy_model(
+            schema_dict, primary_key="id", class_name="IsInstanceDict", base=CoverageBase
+        )
         assert hasattr(Model, "id")
 
     def test_to_sqlalchemy_model_unsupported_type_error_wrapping(self):
@@ -380,7 +386,7 @@ class TestAdditionalCoverage:
         schema = pl.Schema({"items": pl.List(pl.String)})
 
         with pytest.raises(UnsupportedTypeError, match="Field 'items'"):
-            to_sqlalchemy_model(schema, base=CoverageBase)
+            to_sqlalchemy_model(schema, primary_key="items", base=CoverageBase)
 
     def test_to_polars_schema_model_instance(self):
         """Test to_polars_schema with model instance (not class)."""
@@ -426,7 +432,7 @@ class TestAdditionalCoverage:
             }
         )
 
-        Model = to_sqlmodel_class(schema, class_name="AllTypesSQLModel")
+        Model = to_sqlmodel_class(schema, primary_key="int8", class_name="AllTypesSQLModel")
         assert Model.__name__ == "AllTypesSQLModel"
         assert "int8" in Model.__annotations__
         assert "datetime" in Model.__annotations__
@@ -434,7 +440,7 @@ class TestAdditionalCoverage:
     def test_sqlmodel_decimal_type(self):
         """Test SQLModel with Decimal type."""
         schema = pl.Schema({"price": pl.Decimal(10, 2)})
-        Model = to_sqlmodel_class(schema, class_name="DecimalSQLModel")
+        Model = to_sqlmodel_class(schema, primary_key="price", class_name="DecimalSQLModel")
         assert "price" in Model.__annotations__
 
     def test_sqlmodel_unknown_type_any(self):
@@ -448,7 +454,7 @@ class TestAdditionalCoverage:
         # We can't easily create this in a real schema, but we can test
         # the logic path by ensuring the code handles it
         schema = pl.Schema({"id": pl.Int64})
-        Model = to_sqlmodel_class(schema, class_name="AnyTypeSQLModel")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="AnyTypeSQLModel")
         assert Model is not None
 
     def test_sqlmodel_non_nullable_branch(self):
@@ -456,14 +462,14 @@ class TestAdditionalCoverage:
         # This tests the `if not is_nullable:` branch
         # Since our implementation defaults to nullable=True, we need to test differently
         schema = pl.Schema({"id": pl.Int64})
-        Model = to_sqlmodel_class(schema, class_name="NonNullableSQLModel")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="NonNullableSQLModel")
         # Verify the field is created (is_nullable defaults to True)
         assert "id" in Model.__annotations__
 
     def test_sqlmodel_annotation_optional(self):
         """Test SQLModel Optional annotation."""
         schema = pl.Schema({"id": pl.Int64, "name": pl.String})
-        Model = to_sqlmodel_class(schema, class_name="OptionalSQLModel")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="OptionalSQLModel")
         # All fields should be Optional since is_nullable defaults to True
         from typing import Optional
 
@@ -475,7 +481,7 @@ class TestAdditionalCoverage:
         # This would require is_nullable=False, which our implementation doesn't support
         # But we can verify the code path exists
         schema = pl.Schema({"id": pl.Int64})
-        Model = to_sqlmodel_class(schema, class_name="NonOptionalSQLModel")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="NonOptionalSQLModel")
         assert Model is not None
 
     def test_type_mappings_all_integer_variants(self):
@@ -669,7 +675,7 @@ class TestAdditionalCoverage:
         # The actual type will stringify to something like "Datetime(time_unit='us')"
         # So line 286 (elif type_str == "Datetime":) won't be hit with real Polars types
         # But we can verify the code path exists
-        Model = to_sqlmodel_class(schema, class_name="DatetimeSQLModel")
+        Model = to_sqlmodel_class(schema, primary_key="created_at", class_name="DatetimeSQLModel")
         assert "created_at" in Model.__annotations__
 
     def test_sqlmodel_non_nullable_field_branch(self):
@@ -680,7 +686,7 @@ class TestAdditionalCoverage:
 
         # We can't easily change is_nullable in the function, but we can verify
         # the code path exists by checking the logic
-        Model = to_sqlmodel_class(schema, class_name="NonNullableBranch")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="NonNullableBranch")
         # The field should be created with nullable=True by default
         assert "id" in Model.__annotations__
 
@@ -690,7 +696,7 @@ class TestAdditionalCoverage:
         # This requires is_nullable=False, which our implementation doesn't support
         # But we can verify the code path exists
         schema = pl.Schema({"id": pl.Int64})
-        Model = to_sqlmodel_class(schema, class_name="NonOptionalBranch")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="NonOptionalBranch")
         # Since is_nullable defaults to True, we get Optional[int]
         from typing import Optional
 
@@ -708,7 +714,7 @@ class TestAdditionalCoverage:
         # by ensuring the else branch is reachable
         # Actually, let's test with a real schema and verify Any is used for unknown types
         schema = pl.Schema({"id": pl.Int64})
-        Model = to_sqlmodel_class(schema, class_name="AnyTypePath")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="AnyTypePath")
         # id should map to int, not Any
         assert "id" in Model.__annotations__
 
@@ -716,13 +722,15 @@ class TestAdditionalCoverage:
         """Test else branch for schema type check (line 54)."""
         # Test that isinstance check works for dict
         schema_dict = {"id": pl.Int64}
-        Model = to_sqlalchemy_model(schema_dict, class_name="ElseBranch", base=CoverageBase)
+        Model = to_sqlalchemy_model(
+            schema_dict, primary_key="id", class_name="ElseBranch", base=CoverageBase
+        )
         assert hasattr(Model, "id")
 
     def test_to_sqlmodel_class_else_branch_schema_type(self):
         """Test else branch for schema type in to_sqlmodel_class (line 210)."""
         schema_dict = {"id": pl.Int64}
-        Model = to_sqlmodel_class(schema_dict, class_name="ElseBranchSQLModel")
+        Model = to_sqlmodel_class(schema_dict, primary_key="id", class_name="ElseBranchSQLModel")
         assert Model.__name__ == "ElseBranchSQLModel"
 
     def test_type_mappings_import_error_paths(self):
@@ -741,14 +749,16 @@ class TestAdditionalCoverage:
         # Test the elif isinstance(polars_schema, dict) branch
         schema_dict = {"id": pl.Int64}
         Model = to_sqlalchemy_model(
-            schema_dict, class_name="IsInstanceDictBranch", base=CoverageBase
+            schema_dict, primary_key="id", class_name="IsInstanceDictBranch", base=CoverageBase
         )
         assert hasattr(Model, "id")
 
     def test_to_sqlmodel_class_isinstance_dict_branch(self):
         """Test isinstance dict branch in to_sqlmodel_class (line 210)."""
         schema_dict = {"id": pl.Int64}
-        Model = to_sqlmodel_class(schema_dict, class_name="IsInstanceDictSQLModel")
+        Model = to_sqlmodel_class(
+            schema_dict, primary_key="id", class_name="IsInstanceDictSQLModel"
+        )
         assert Model.__name__ == "IsInstanceDictSQLModel"
 
     def test_to_sqlmodel_class_polars_not_installed(self):
@@ -757,7 +767,7 @@ class TestAdditionalCoverage:
 
         with patch("squirtle.converters.pl", None):
             with pytest.raises(ImportError, match="polars is required"):
-                to_sqlmodel_class(schema)
+                to_sqlmodel_class(schema, primary_key="id")
 
         # To actually test the branch, we'd need to modify the function or use more complex mocking
         # For now, we verify the code exists
@@ -768,7 +778,7 @@ class TestAdditionalCoverage:
         # This requires is_nullable=False, which our implementation doesn't support
         # But we can verify the code path exists
         schema = pl.Schema({"id": pl.Int64})
-        Model = to_sqlmodel_class(schema, class_name="NonOptionalBranch")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="NonOptionalBranch")
         # Since is_nullable is True, we get Optional[int]
         from typing import Optional
 
@@ -797,7 +807,9 @@ class TestAdditionalCoverage:
                 return [("created_at", ExactDatetimeType())]
 
         schema = CustomSchema()
-        Model = to_sqlmodel_class(schema, class_name="ExactDatetimeSQLModel")
+        Model = to_sqlmodel_class(
+            schema, primary_key="created_at", class_name="ExactDatetimeSQLModel"
+        )
         assert "created_at" in Model.__annotations__
         from datetime import datetime
         from typing import Optional

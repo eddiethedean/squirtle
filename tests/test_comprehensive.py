@@ -36,7 +36,9 @@ class TestRoundTrip:
         )
 
         # Convert to SQLAlchemy
-        Model = to_sqlalchemy_model(original_schema, class_name="Person", base=Base)
+        Model = to_sqlalchemy_model(
+            original_schema, primary_key="name", class_name="Person", base=Base
+        )
 
         # Convert back to Polars
         converted_schema = to_polars_schema(Model)
@@ -57,7 +59,9 @@ class TestRoundTrip:
             }
         )
 
-        Model = to_sqlalchemy_model(original_schema, class_name="PersonNullable", base=Base)
+        Model = to_sqlalchemy_model(
+            original_schema, primary_key="id", class_name="PersonNullable", base=Base
+        )
         converted_schema = to_polars_schema(Model)
 
         assert len(converted_schema) == len(original_schema)
@@ -79,7 +83,9 @@ class TestRoundTrip:
             }
         )
 
-        Model = to_sqlalchemy_model(original_schema, class_name="PersonAllTypes", base=Base)
+        Model = to_sqlalchemy_model(
+            original_schema, primary_key="id", class_name="PersonAllTypes", base=Base
+        )
         converted_schema = to_polars_schema(Model)
 
         assert len(converted_schema) == len(original_schema)
@@ -95,8 +101,8 @@ class TestComplexScenarios:
         schema1 = pl.Schema({"id": pl.Int64, "name": pl.String})
         schema2 = pl.Schema({"id": pl.Int64, "email": pl.String})
 
-        Model1 = to_sqlalchemy_model(schema1, class_name="User", base=Base)
-        Model2 = to_sqlalchemy_model(schema2, class_name="Contact", base=Base)
+        Model1 = to_sqlalchemy_model(schema1, primary_key="id", class_name="User", base=Base)
+        Model2 = to_sqlalchemy_model(schema2, primary_key="id", class_name="Contact", base=Base)
 
         assert Model1.__name__ == "User"
         assert Model2.__name__ == "Contact"
@@ -110,7 +116,7 @@ class TestComplexScenarios:
             pass
 
         schema = pl.Schema({"id": pl.Int64, "name": pl.String})
-        Model = to_sqlalchemy_model(schema, class_name="Test", base=CustomBase)
+        Model = to_sqlalchemy_model(schema, primary_key="id", class_name="Test", base=CustomBase)
 
         assert issubclass(Model, CustomBase)
 
@@ -118,8 +124,10 @@ class TestComplexScenarios:
         """Test that table names are generated correctly."""
         schema = pl.Schema({"id": pl.Int64})
 
-        Model1 = to_sqlalchemy_model(schema, class_name="PersonTable", base=Base)
-        Model2 = to_sqlalchemy_model(schema, class_name="UserProfileTable", base=Base)
+        Model1 = to_sqlalchemy_model(schema, primary_key="id", class_name="PersonTable", base=Base)
+        Model2 = to_sqlalchemy_model(
+            schema, primary_key="id", class_name="UserProfileTable", base=Base
+        )
 
         assert Model1.__tablename__ == "person_table"
         assert Model2.__tablename__ == "user_profile_table"

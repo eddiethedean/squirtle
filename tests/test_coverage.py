@@ -47,7 +47,7 @@ class TestToSQLModelClass:
             }
         )
 
-        Person = to_sqlmodel_class(schema, class_name="PersonSQLModel")
+        Person = to_sqlmodel_class(schema, primary_key="id", class_name="PersonSQLModel")
 
         assert Person.__name__ == "PersonSQLModel"
         assert Person.__tablename__ == "person_sql_model"
@@ -70,7 +70,7 @@ class TestToSQLModelClass:
             }
         )
 
-        Model = to_sqlmodel_class(schema, class_name="AllTypesModel")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="AllTypesModel")
         assert Model.__name__ == "AllTypesModel"
         assert "id" in Model.__annotations__
         assert "name" in Model.__annotations__
@@ -80,12 +80,12 @@ class TestToSQLModelClass:
         schema = pl.Schema({})
 
         with pytest.raises(SchemaError, match="at least one field"):
-            to_sqlmodel_class(schema)
+            to_sqlmodel_class(schema, primary_key="id")
 
     def test_sqlmodel_invalid_schema_type(self):
         """Test that invalid schema type raises SchemaError."""
         with pytest.raises(SchemaError, match="Invalid schema type"):
-            to_sqlmodel_class("not a schema")
+            to_sqlmodel_class("not a schema", primary_key="id")
 
     def test_sqlmodel_duplicate_fields(self):
         """Test that duplicate fields raise SchemaError."""
@@ -102,14 +102,14 @@ class TestToSQLModelClass:
         schema_dict = {"": pl.String}
 
         with pytest.raises(SchemaError, match="Invalid field name"):
-            to_sqlmodel_class(schema_dict)
+            to_sqlmodel_class(schema_dict, primary_key="")
 
     def test_sqlmodel_without_sqlmodel_installed(self):
         """Test ImportError when sqlmodel is not available."""
         # This test would require mocking, but we can't easily do that
         # So we'll just ensure the function works when sqlmodel is installed
         schema = pl.Schema({"id": pl.Int64})
-        Model = to_sqlmodel_class(schema, class_name="TestModel")
+        Model = to_sqlmodel_class(schema, primary_key="id", class_name="TestModel")
         assert Model is not None
 
 
@@ -119,7 +119,7 @@ class TestErrorHandling:
     def test_to_sqlalchemy_model_invalid_schema_type(self):
         """Test that invalid schema type raises SchemaError."""
         with pytest.raises(SchemaError, match="Invalid schema type"):
-            to_sqlalchemy_model("not a schema", base=UniqueBase)
+            to_sqlalchemy_model("not a schema", primary_key="id", base=UniqueBase)
 
     def test_to_polars_schema_table_is_none(self):
         """Test that model with None table raises SchemaError."""
@@ -165,7 +165,7 @@ class TestErrorHandling:
         )
 
         with pytest.raises(UnsupportedTypeError, match="Field 'items'"):
-            to_sqlalchemy_model(schema, base=UniqueBase)
+            to_sqlalchemy_model(schema, primary_key="items", base=UniqueBase)
 
     def test_to_polars_schema_with_unsupported_type_error(self):
         """Test that UnsupportedTypeError is properly raised for columns."""
@@ -256,22 +256,26 @@ class TestSchemaValidation:
         schema_dict = {"": pl.String}
 
         with pytest.raises(SchemaError, match="Invalid field name"):
-            to_sqlalchemy_model(schema_dict, base=UniqueBase)
+            to_sqlalchemy_model(schema_dict, primary_key="", base=UniqueBase)
 
     def test_non_string_field_name(self):
         """Test that non-string field name raises SchemaError."""
         schema_dict = {123: pl.String}
 
         with pytest.raises(SchemaError, match="Invalid field name"):
-            to_sqlalchemy_model(schema_dict, base=UniqueBase)
+            to_sqlalchemy_model(schema_dict, primary_key="id", base=UniqueBase)
 
     def test_schema_dict_vs_schema_object(self):
         """Test that both dict and Schema object work."""
         schema_dict = {"id": pl.Int64, "name": pl.String}
         schema_obj = pl.Schema(schema_dict)
 
-        Model1 = to_sqlalchemy_model(schema_dict, class_name="DictModel", base=UniqueBase)
-        Model2 = to_sqlalchemy_model(schema_obj, class_name="SchemaModel", base=UniqueBase)
+        Model1 = to_sqlalchemy_model(
+            schema_dict, primary_key="id", class_name="DictModel", base=UniqueBase
+        )
+        Model2 = to_sqlalchemy_model(
+            schema_obj, primary_key="id", class_name="SchemaModel", base=UniqueBase
+        )
 
         assert Model1.__name__ == "DictModel"
         assert Model2.__name__ == "SchemaModel"
@@ -301,7 +305,9 @@ class TestEdgeCases:
         """Test schema with only one field."""
         schema = pl.Schema({"id": pl.Int64})
 
-        Model = to_sqlalchemy_model(schema, class_name="SingleField", base=UniqueBase)
+        Model = to_sqlalchemy_model(
+            schema, primary_key="id", class_name="SingleField", base=UniqueBase
+        )
         assert hasattr(Model, "id")
         assert Model.id.primary_key is True
 
@@ -320,7 +326,9 @@ class TestEdgeCases:
             }
         )
 
-        Model = to_sqlalchemy_model(schema, class_name="IntTypes", base=UniqueBase)
+        Model = to_sqlalchemy_model(
+            schema, primary_key="int8", class_name="IntTypes", base=UniqueBase
+        )
         assert hasattr(Model, "int8")
         assert hasattr(Model, "uint64")
 
@@ -333,7 +341,9 @@ class TestEdgeCases:
             }
         )
 
-        Model = to_sqlalchemy_model(schema, class_name="FloatTypes", base=UniqueBase)
+        Model = to_sqlalchemy_model(
+            schema, primary_key="float32", class_name="FloatTypes", base=UniqueBase
+        )
         assert hasattr(Model, "float32")
         assert hasattr(Model, "float64")
 
@@ -347,7 +357,9 @@ class TestEdgeCases:
             }
         )
 
-        Model = to_sqlalchemy_model(schema, class_name="DateTimeTypes", base=UniqueBase)
+        Model = to_sqlalchemy_model(
+            schema, primary_key="date", class_name="DateTimeTypes", base=UniqueBase
+        )
         assert hasattr(Model, "date")
         assert hasattr(Model, "datetime")
         assert hasattr(Model, "time")
@@ -356,7 +368,9 @@ class TestEdgeCases:
         """Test boolean type."""
         schema = pl.Schema({"active": pl.Boolean})
 
-        Model = to_sqlalchemy_model(schema, class_name="BooleanType", base=UniqueBase)
+        Model = to_sqlalchemy_model(
+            schema, primary_key="active", class_name="BooleanType", base=UniqueBase
+        )
         assert hasattr(Model, "active")
 
     def test_decimal_type(self):
@@ -364,7 +378,9 @@ class TestEdgeCases:
         # Decimal needs precision and scale parameters
         schema = pl.Schema({"price": pl.Decimal(10, 2)})
 
-        Model = to_sqlalchemy_model(schema, class_name="DecimalType", base=UniqueBase)
+        Model = to_sqlalchemy_model(
+            schema, primary_key="price", class_name="DecimalType", base=UniqueBase
+        )
         assert hasattr(Model, "price")
 
     def test_model_with_no_primary_key_explicit(self):
@@ -376,6 +392,6 @@ class TestEdgeCases:
             }
         )
 
-        Model = to_sqlalchemy_model(schema, class_name="NoPK", base=UniqueBase)
-        # First field should be primary key
+        Model = to_sqlalchemy_model(schema, primary_key="name", class_name="NoPK", base=UniqueBase)
+        # name should be primary key
         assert Model.name.primary_key is True
